@@ -1,0 +1,19 @@
+# Local-only, one-time use. See db/migration/README.md — "Bootstrapping a fresh empty database".
+#
+# Activate with --spring.profiles.active=bootstrap (IntelliJ: Run > Edit Configurations >
+# Active profiles: bootstrap) for exactly ONE run against a brand-new empty local database,
+# then remove the profile and run normally from then on.
+#
+# What it does: disables Flyway entirely and lets Hibernate's ddl-auto=update create every
+# table from the JPA entities directly — including the ones that were only ever created by
+# Hibernate on Railway and were never captured in any db/*.sql script (payment_transactions,
+# wallets, settings, service_bookings, and others — see the migration README for the full list).
+# This is the same mechanism that originally built the Railway schema over time; replaying it
+# once locally is more reliable than hand-writing DDL for 14 tables from entity definitions
+# without a database to test against.
+spring:
+  flyway:
+    enabled: false
+  jpa:
+    hibernate:
+      ddl-auto: update
