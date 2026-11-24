@@ -1,13 +1,13 @@
 package com.shopmart.module.order.controller;
 
 import com.shopmart.common.dto.ApiResponse;
-import com.shopmart.module.order.dto.TrackingUpdateRequest;
-import com.shopmart.module.order.dto.StatusHistoryResponse;
 import com.shopmart.common.dto.PageResponse;
 import com.shopmart.module.order.dto.CreateOrderRequest;
 import com.shopmart.module.order.dto.OrderResponse;
 import com.shopmart.module.order.dto.OrderSummary;
+import com.shopmart.module.order.dto.StatusHistoryResponse;
 import com.shopmart.module.order.dto.TrackingResponse;
+import com.shopmart.module.order.dto.TrackingUpdateRequest;
 import com.shopmart.module.order.entity.OrderStatus;
 import com.shopmart.module.order.service.OrderService;
 import com.shopmart.security.SecurityUtils;
@@ -30,10 +30,12 @@ public class OrderController {
     private final OrderService service;
 
     @PostMapping
-    public ResponseEntity<ApiResponse<OrderResponse>> create(@Valid @RequestBody CreateOrderRequest request) {
-        OrderResponse order = service.create(SecurityUtils.currentUserId(), request);
+    public ResponseEntity<ApiResponse<OrderResponse>> create(
+            @Valid @RequestBody CreateOrderRequest request,
+            @RequestHeader(value = "Idempotency-Key", required = false) String idempotencyKey) {
+        OrderResponse order = service.create(SecurityUtils.currentUserId(), request, idempotencyKey);
         return ResponseEntity.status(HttpStatus.CREATED)
-                .body(ApiResponse.ok("Order placed", order));
+                .body(ApiResponse.ok("Order created", order));
     }
 
     @GetMapping
@@ -57,15 +59,20 @@ public class OrderController {
         return ApiResponse.ok(service.track(SecurityUtils.currentUserId(), id));
     }
 
+    @GetMapping("/{id}/tracking")
+    public ApiResponse<TrackingResponse> trackAlias(@PathVariable Long id) {
+        return ApiResponse.ok(service.track(SecurityUtils.currentUserId(), id));
+    }
+
     @PatchMapping("/{id}/status")
-    @PreAuthorize("hasRole('ADMIN')")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
     public ApiResponse<OrderResponse> updateStatus(@PathVariable Long id, @RequestParam OrderStatus status) {
         return ApiResponse.ok("Order status updated", service.updateStatus(id, status));
     }
 
     @PostMapping("/{id}/tracking")
-    @org.springframework.security.access.prepost.PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
-    public ApiResponse<com.shopmart.module.order.dto.OrderResponse> setTracking(
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
+    public ApiResponse<OrderResponse> setTracking(
             @PathVariable Long id, @RequestBody TrackingUpdateRequest req) {
         return ApiResponse.ok("Tracking updated",
                 service.setTracking(id, req.trackingNumber(), req.courierPartner()));
@@ -73,6 +80,6 @@ public class OrderController {
 
     @GetMapping("/{id}/history")
     public ApiResponse<java.util.List<StatusHistoryResponse>> history(@PathVariable Long id) {
-        return ApiResponse.ok(service.statusHistory(id));
+        return ApiResponse.ok(service.statusHistory(SecurityUtils.currentUserId(), id));
     }
 }

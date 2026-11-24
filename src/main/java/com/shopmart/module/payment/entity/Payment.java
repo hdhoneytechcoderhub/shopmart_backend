@@ -23,7 +23,7 @@ public class Payment extends BaseEntity {
     private Long orderId;
 
     @Column(nullable = false)
-    private String method;          // COD, UPI, CARD, NETBANKING, WALLET
+    private String method;          // RAZORPAY, UPI, CARD, NETBANKING, WALLET, COD
 
     @Column(nullable = false, precision = 12, scale = 2)
     private BigDecimal amount;
@@ -35,10 +35,10 @@ public class Payment extends BaseEntity {
     private String provider;        // razorpay, stripe, none (COD)
 
     @Column(name = "gateway_ref")
-    private String gatewayRef;      // gateway order id / intent id
+    private String gatewayRef;      // Razorpay order id
 
     @Column(name = "transaction_id")
-    private String transactionId;   // gateway payment id on success
+    private String transactionId;   // Razorpay payment id on success
 
     private String failureReason;
 
@@ -47,6 +47,6 @@ public class Payment extends BaseEntity {
     private BigDecimal refundedAmount = BigDecimal.ZERO;
 
     public enum PaymentState {
-        CREATED, PENDING, SUCCESS, FAILED, REFUNDED, PARTIALLY_REFUNDED
+        CREATED, PENDING, SUCCESS, FAILED, CANCELLED, REFUNDED, PARTIALLY_REFUNDED
     }
 }

@@ -9,12 +9,12 @@ import com.shopmart.module.order.entity.OrderStatus;
 import org.springframework.data.domain.Pageable;
 
 public interface OrderService {
-    OrderResponse create(Long userId, CreateOrderRequest request);
+    OrderResponse create(Long userId, CreateOrderRequest request, String idempotencyKey);
     PageResponse<OrderSummary> getOrders(Long userId, Pageable pageable);
     OrderResponse getOrderDetails(Long userId, Long orderId);
     OrderResponse cancel(Long userId, Long orderId);
     TrackingResponse track(Long userId, Long orderId);
     OrderResponse updateStatus(Long orderId, OrderStatus status);
     OrderResponse setTracking(Long orderId, String trackingNumber, String courierPartner);
-    java.util.List<com.shopmart.module.order.dto.StatusHistoryResponse> statusHistory(Long orderId);
+    java.util.List<com.shopmart.module.order.dto.StatusHistoryResponse> statusHistory(Long userId, Long orderId);
 }

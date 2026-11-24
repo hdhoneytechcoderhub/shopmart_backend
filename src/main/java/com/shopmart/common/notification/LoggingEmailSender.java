@@ -1,16 +1,19 @@
 package com.shopmart.common.notification;
 
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
-import org.springframework.stereotype.Component;
 
-/** Default email channel: logs instead of sending. Active unless app.mail.enabled=true. */
+/**
+ * Development fallback used when Resend is not configured (no RESEND_API_KEY /
+ * RESEND_FROM_EMAIL). Logs the message instead of delivering it, so signup OTPs and
+ * order emails keep working locally without external credentials.
+ */
 @Slf4j
-@Component
-@ConditionalOnProperty(name = "app.mail.enabled", havingValue = "false", matchIfMissing = true)
 public class LoggingEmailSender implements EmailSender {
+
     @Override
     public void send(String to, String subject, String body) {
-        log.info("[EMAIL:log] to={} subject={} body={}", to, subject, body);
+        if (to == null || to.isBlank()) return;
+        log.info("[EMAIL:log] Resend is not configured; email not delivered. to={} subject={}\n{}",
+                to, subject, body);
     }
 }

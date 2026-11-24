@@ -18,10 +18,12 @@ CREATE INDEX IF NOT EXISTS idx_attendance_user ON attendance (user_id);
 -- SELECT id, 'ROLE_SUPER_ADMIN' FROM users WHERE email = 'superadmin@shopmart.local'
 -- AND NOT EXISTS (SELECT 1 FROM user_roles ur WHERE ur.user_id = users.id AND ur.role='ROLE_SUPER_ADMIN');
 
--- 3) Create a super admin from scratch (BCrypt of 'Super@12345')
+-- 3) Create a super admin from scratch using a BCrypt hash generated locally.
+-- Never commit a hash for a known/default password; prefer the application's
+-- SUPERADMIN_EMAIL / SUPERADMIN_PASSWORD first-run seeding instead.
 -- INSERT INTO users (name, email, password_hash, email_verified, enabled, provider, created_at, updated_at)
 -- VALUES ('Super Admin', 'superadmin@shopmart.local',
---         '$2b$10$vNiLq7CnQRuH5V9FCWzvW.i8r5mTcZ5mBtCDJRnXZLNdaTtKECV2.',  -- replace with hash of Super@12345
+--         '<bcrypt-hash>',
 --         TRUE, TRUE, 'LOCAL', now(), now());
 -- INSERT INTO user_roles (user_id, role)
 -- SELECT id, r FROM users CROSS JOIN (VALUES ('ROLE_SUPER_ADMIN'),('ROLE_ADMIN'),('ROLE_CUSTOMER')) AS t(r)

@@ -6,7 +6,7 @@ import org.springframework.stereotype.Component;
 
 /**
  * Default push channel: logs instead of sending. Active unless app.push.enabled=true.
- * Mirrors LoggingEmailSender/LoggingSmsSender. Wiring a real provider (FCM/APNs) means adding
+ * Mirrors the logging SMS sender. Wiring a real provider (FCM/APNs) means adding
  * a device-token store (not present in this codebase) and an HttpPushSender analogous to
  * HttpSmsSender — that's genuinely new infrastructure, not something to fake here.
  */

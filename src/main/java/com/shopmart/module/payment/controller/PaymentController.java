@@ -2,6 +2,7 @@ package com.shopmart.module.payment.controller;
 
 import com.shopmart.common.dto.ApiResponse;
 import com.shopmart.module.payment.dto.CreatePaymentRequest;
+import com.shopmart.module.payment.dto.OrderPaymentStatusResponse;
 import com.shopmart.module.payment.dto.PaymentIntentResponse;
 import com.shopmart.module.payment.dto.PaymentResponse;
 import com.shopmart.module.payment.dto.VerifyPaymentRequest;
@@ -25,53 +26,38 @@ public class PaymentController {
 
     @PostMapping("/initiate")
     public ApiResponse<PaymentIntentResponse> initiate(@Valid @RequestBody CreatePaymentRequest request) {
-        log.info("Create Payment Request: {}", request);
-        log.info("Order Id: {}", request.orderId());
-        try {
-            return ApiResponse.ok("Payment initiated", service.initiate(SecurityUtils.currentUserId(), request));
-        } catch (Exception e) {
-            log.error("Razorpay Error", e);
-            throw e;
-        }
+        return ApiResponse.ok("Payment initiated", service.initiate(SecurityUtils.currentUserId(), request));
     }
 
     /** Alias for /initiate — creates a gateway order for the given order. */
     @PostMapping("/create-order")
     public ApiResponse<PaymentIntentResponse> createOrder(@Valid @RequestBody CreatePaymentRequest request) {
-        log.info("Create Payment Request: {}", request);
-        log.info("Order Id: {}", request.orderId());
-        try {
-            return ApiResponse.ok("Order created", service.initiate(SecurityUtils.currentUserId(), request));
-        } catch (Exception e) {
-            log.error("Razorpay Error", e);
-            throw e;
-        }
+        return ApiResponse.ok("Order created", service.initiate(SecurityUtils.currentUserId(), request));
     }
 
     /**
-     * Gateway webhook (Razorpay/PhonePe call this server-to-server).
-     * Public endpoint; the gateway signature is verified inside the service.
-     * Body and signature header are passed through for verification.
+     * Gateway webhook (Razorpay calls this server-to-server). Public endpoint;
+     * the raw body signature is verified inside the service before anything is applied.
      */
     @PostMapping("/webhook")
     public ApiResponse<Void> webhook(@RequestBody(required = false) String payload,
                                      @RequestHeader(value = "X-Razorpay-Signature", required = false) String razorpaySig,
+                                     @RequestHeader(value = "X-Razorpay-Event-Id", required = false) String razorpayEventId,
                                      @RequestHeader(value = "X-Verify", required = false) String phonepeSig,
                                      @RequestHeader(value = "Stripe-Signature", required = false) String stripeSig) {
-        service.handleWebhook(payload, razorpaySig, phonepeSig, stripeSig);
+        service.handleWebhook(payload, razorpayEventId, razorpaySig, phonepeSig, stripeSig);
         return ApiResponse.message("ok");
     }
 
     @PostMapping("/verify")
     public ApiResponse<PaymentResponse> verify(@Valid @RequestBody VerifyPaymentRequest request) {
-        log.info("Verify Payment Request: {}", request);
-        log.info("Order Id: {}", request.orderId());
-        try {
-            return ApiResponse.ok("Payment verified", service.verify(SecurityUtils.currentUserId(), request));
-        } catch (Exception e) {
-            log.error("Razorpay Error", e);
-            throw e;
-        }
+        return ApiResponse.ok("Payment verified", service.verify(SecurityUtils.currentUserId(), request));
+    }
+
+    /** Re-reads the gateway's authoritative state and settles the order if it was paid. */
+    @PostMapping("/order/{orderId}/sync")
+    public ApiResponse<OrderPaymentStatusResponse> sync(@PathVariable Long orderId) {
+        return ApiResponse.ok(service.syncStatus(SecurityUtils.currentUserId(), orderId));
     }
 
     @PostMapping("/{orderId}/refund")
@@ -96,9 +82,9 @@ public class PaymentController {
     }
 
     @GetMapping("/{orderId}/transactions")
-    public ApiResponse<java.util.List<com.shopmart.module.payment.entity.PaymentTransaction>> transactions(
+    public ApiResponse<List<com.shopmart.module.payment.entity.PaymentTransaction>> transactions(
             @PathVariable Long orderId) {
-        return ApiResponse.ok(service.transactions(orderId));
+        return ApiResponse.ok(service.transactions(SecurityUtils.currentUserId(), orderId));
     }
 
     @GetMapping("/order/{orderId}")

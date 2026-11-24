@@ -12,5 +12,6 @@ public record PaymentResponse(
         String status,
         String gatewayRef,
         String transactionId,
+        String failureReason,
         Instant createdAt
 ) {}

@@ -6,6 +6,6 @@ import jakarta.validation.constraints.NotNull;
 
 public record CreateOrderRequest(
         @NotNull @Valid ShippingAddressDto shippingAddress,
-        @NotBlank String paymentMethod,   // COD, UPI, CARD, NETBANKING, WALLET
+        @NotBlank String paymentMethod,   // RAZORPAY (gateway), COD
         String couponCode
 ) {}

@@ -7,17 +7,22 @@ import com.shopmart.module.product.dto.ProductRequest;
 import com.shopmart.module.product.dto.ProductResponse;
 import com.shopmart.module.product.dto.ProductSummary;
 import com.shopmart.module.product.dto.RejectRequest;
+import com.shopmart.module.product.entity.ProductStatus;
 import com.shopmart.module.product.service.ProductService;
 import io.swagger.v3.oas.annotations.tags.Tag;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.domain.Sort;
 import org.springframework.data.web.PageableDefault;
 import org.springframework.security.access.prepost.PreAuthorize;
 import org.springframework.web.bind.annotation.*;
 
 import java.math.BigDecimal;
+import java.util.ArrayList;
 import java.util.List;
+import java.util.Set;
 
 @RestController
 @RequestMapping("/products")
@@ -37,7 +42,7 @@ public class ProductController {
             @RequestParam(required = false) BigDecimal maxPrice,
             @PageableDefault(size = 20, sort = "createdAt") Pageable pageable) {
         ProductFilter filter = new ProductFilter(q, categoryId, brandId, featured, minPrice, maxPrice);
-        return ApiResponse.ok(service.search(filter, pageable));
+        return ApiResponse.ok(service.search(filter, resolveSort(pageable)));
     }
 
     @GetMapping("/featured")
@@ -97,13 +102,24 @@ public class ProductController {
         return ApiResponse.message("Product deleted");
     }
 
+    // ---- Admin: full catalog (every status, server-side paged/sorted) ----
+
+    @GetMapping("/admin/all")
+    @PreAuthorize("hasAnyRole('ADMIN','SUPER_ADMIN')")
+    public ApiResponse<PageResponse<ProductResponse>> adminAll(
+            @RequestParam(required = false) String status,
+            @RequestParam(required = false) String q,
+            @PageableDefault(size = 20, sort = "createdAt") Pageable pageable) {
+        return ApiResponse.ok(service.adminSearch(parseStatus(status), q, resolveSort(pageable)));
+    }
+
     // ---- Admin: vendor product approval ----
 
     @GetMapping("/pending")
     @PreAuthorize("hasRole('ADMIN')")
     public ApiResponse<PageResponse<ProductSummary>> pending(
             @PageableDefault(size = 20, sort = "createdAt") Pageable pageable) {
-        return ApiResponse.ok(service.pendingApproval(pageable));
+        return ApiResponse.ok(service.pendingApproval(resolveSort(pageable)));
     }
 
     @PostMapping("/{id}/approve")
@@ -134,5 +150,52 @@ public class ProductController {
     public ApiResponse<Void> deleteImage(@PathVariable Long id, @PathVariable Long imageId) {
         service.removeImage(id, imageId);
         return ApiResponse.message("Image deleted");
+    }
+
+    // ---- paging helpers ----
+
+    /** Blank/unknown status filters mean "all statuses" rather than an error. */
+    private static ProductStatus parseStatus(String status) {
+        if (status == null || status.isBlank()) return null;
+        try {
+            return ProductStatus.valueOf(status.trim().toUpperCase());
+        } catch (IllegalArgumentException e) {
+            return null;
+        }
+    }
+
+    /** Real, sortable Product properties (used to reject bogus `sort=` values). */
+    private static final Set<String> SORTABLE_PROPERTIES = Set.of(
+            "id", "createdAt", "updatedAt", "name", "slug", "sku", "price", "salePrice",
+            "stock", "ratingAverage", "ratingCount", "featured", "status");
+
+    /**
+     * The storefront sorts with friendly tokens (`newest`, `popular`, `price_asc`, ...)
+     * that are not entity properties. Map them to real columns, and ignore unknown
+     * properties instead of letting Spring Data fail the whole request with a 500.
+     */
+    private static Pageable resolveSort(Pageable pageable) {
+        List<Sort.Order> orders = new ArrayList<>();
+        for (Sort.Order order : pageable.getSort()) {
+            switch (order.getProperty()) {
+                case "newest", "latest" -> orders.add(new Sort.Order(Sort.Direction.DESC, "createdAt"));
+                case "popular", "bestseller", "best_seller", "best_sellers" -> {
+                    orders.add(new Sort.Order(Sort.Direction.DESC, "ratingCount"));
+                    orders.add(new Sort.Order(Sort.Direction.DESC, "ratingAverage"));
+                }
+                case "rating", "top_rated" -> orders.add(new Sort.Order(Sort.Direction.DESC, "ratingAverage"));
+                case "price_asc", "price-asc" -> orders.add(new Sort.Order(Sort.Direction.ASC, "price"));
+                case "price_desc", "price-desc" -> orders.add(new Sort.Order(Sort.Direction.DESC, "price"));
+                default -> {
+                    if (SORTABLE_PROPERTIES.contains(order.getProperty())) {
+                        orders.add(order);
+                    }
+                }
+            }
+        }
+        if (orders.isEmpty()) {
+            orders.add(new Sort.Order(Sort.Direction.DESC, "createdAt"));
+        }
+        return PageRequest.of(pageable.getPageNumber(), pageable.getPageSize(), Sort.by(orders));
     }
 }

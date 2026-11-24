@@ -4,7 +4,8 @@ services:
     environment:
       POSTGRES_DB: shopmart
       POSTGRES_USER: shopmart
-      POSTGRES_PASSWORD: ${DB_PASSWORD:-changeme}
+      # Required; there is no default database password.
+      POSTGRES_PASSWORD: "${SPRING_DATASOURCE_PASSWORD:?set SPRING_DATASOURCE_PASSWORD}"
     volumes:
       - pgdata:/var/lib/postgresql/data
     ports:
@@ -22,12 +23,24 @@ services:
         condition: service_healthy
     environment:
       SERVER_PORT: 8080
-      DB_URL: jdbc:postgresql://db:5432/shopmart
-      DB_USERNAME: shopmart
-      DB_PASSWORD: ${DB_PASSWORD:-changeme}
-      JWT_SECRET: ${JWT_SECRET:-change-this-in-production-please-256bit}
-      JPA_DDL_AUTO: update
-      # Optional: PAYMENT_PROVIDER, MAIL_ENABLED, etc.
+      SPRING_DATASOURCE_URL: jdbc:postgresql://db:5432/shopmart
+      SPRING_DATASOURCE_USERNAME: shopmart
+      SPRING_DATASOURCE_PASSWORD: "${SPRING_DATASOURCE_PASSWORD:?set SPRING_DATASOURCE_PASSWORD}"
+      # Required, Base64-encoded and at least 32 bytes after decoding.
+      JWT_SECRET: "${JWT_SECRET:?set JWT_SECRET}"
+      JPA_DDL_AUTO: validate
+      RESEND_API_KEY: ${RESEND_API_KEY:-}
+      RESEND_FROM_EMAIL: ${RESEND_FROM_EMAIL:-}
+      RAZORPAY_KEY_ID: ${RAZORPAY_KEY_ID:-}
+      RAZORPAY_KEY_SECRET: ${RAZORPAY_KEY_SECRET:-}
+      RAZORPAY_WEBHOOK_SECRET: ${RAZORPAY_WEBHOOK_SECRET:-}
+      CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME:-}
+      CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY:-}
+      CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET:-}
+      # Optional first-run staff seeding; skipped when the password is blank.
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      SUPERADMIN_PASSWORD: ${SUPERADMIN_PASSWORD:-}
+      ENGINEER_PASSWORD: ${ENGINEER_PASSWORD:-}
     ports:
       - "8080:8080"
     restart: unless-stopped

@@ -34,7 +34,7 @@ public interface UserRepository extends JpaRepository<User, Long> {
     java.util.List<MonthlyNewCustomers> monthlyNewCustomers(@Param("from") java.time.Instant from);
 
     interface MonthlyNewCustomers {
-        java.sql.Timestamp getBucketMonth();
+        java.time.Instant getBucketMonth();
         Long getNewCustomers();
     }
 }

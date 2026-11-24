@@ -1,5 +1,5 @@
 package com.shopmart.module.order.entity;
 
 public enum PaymentStatus {
-    PENDING, PAID, FAILED, REFUNDED, PARTIALLY_REFUNDED
+    PENDING, PAID, FAILED, CANCELLED, REFUNDED, PARTIALLY_REFUNDED
 }

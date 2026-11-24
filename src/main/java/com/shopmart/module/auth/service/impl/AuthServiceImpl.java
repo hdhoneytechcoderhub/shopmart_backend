@@ -3,6 +3,7 @@ package com.shopmart.module.auth.service.impl;
 import com.shopmart.common.exception.BadRequestException;
 import com.shopmart.common.exception.ConflictException;
 import com.shopmart.common.exception.ResourceNotFoundException;
+import com.shopmart.common.notification.NotificationDeliveryException;
 import com.shopmart.common.notification.NotificationService;
 import com.shopmart.module.auth.dto.*;
 import com.shopmart.module.auth.entity.OtpVerification;
@@ -20,6 +21,7 @@ import com.shopmart.module.user.entity.User;
 import com.shopmart.module.user.repository.UserRepository;
 import com.shopmart.security.JwtTokenProvider;
 import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
@@ -29,6 +31,7 @@ import java.util.UUID;
 import java.time.Instant;
 import java.time.temporal.ChronoUnit;
 
+@Slf4j
 @Service
 @RequiredArgsConstructor
 public class AuthServiceImpl implements AuthService {
@@ -271,7 +274,13 @@ public class AuthServiceImpl implements AuthService {
         otp.setExpiresAt(Instant.now().plus(OTP_TTL_MINUTES, ChronoUnit.MINUTES));
         otpRepository.save(otp);
         String phone = userRepository.findByEmail(email).map(User::getPhone).orElse(null);
-        notificationService.sendOtp(email, phone, code, purpose.name());
+        try {
+            notificationService.sendOtp(email, phone, code, purpose.name());
+        } catch (NotificationDeliveryException e) {
+            // The code is already persisted, so an email outage must not fail (and roll back)
+            // registration or lock a customer out of password reset. The user can resend.
+            log.warn("Could not deliver {} code to {}: {}", purpose, email, e.getMessage());
+        }
     }
 
     private OtpVerification consumeOtp(String email, String code, OtpPurpose purpose) {

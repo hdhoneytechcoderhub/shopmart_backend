@@ -37,6 +37,18 @@ public final class ProductSpecifications {
         };
     }
 
+    /** Admin listing search: matches the product name or SKU across every status. */
+    public static Specification<Product> adminKeyword(String q) {
+        return (root, query, cb) -> {
+            if (q == null || q.isBlank()) return null;
+            String like = "%" + q.trim().toLowerCase() + "%";
+            return cb.or(
+                    cb.like(cb.lower(root.get("name")), like),
+                    cb.like(cb.lower(root.get("sku")), like)
+            );
+        };
+    }
+
     public static Specification<Product> keyword(String q) {
         return (root, query, cb) -> {
             if (q == null || q.isBlank()) return null;

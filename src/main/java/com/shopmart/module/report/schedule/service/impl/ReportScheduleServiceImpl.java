@@ -111,7 +111,7 @@ public class ReportScheduleServiceImpl implements ReportScheduleService {
 
     /** Renders the report as a plain-text CSV body embedded directly in the email — the existing
      *  EmailSender abstraction (send(to, subject, body)) has no attachment support, and adding one
-     *  would mean changing SmtpEmailSender's contract for every other caller too. A CSV table in
+     *  would mean changing EmailSender's contract for every other caller too. A CSV table in
      *  the body is genuinely usable (copy-paste into a spreadsheet) without that wider change. */
     private String renderReport(ReportType type) {
         List<String> headers;

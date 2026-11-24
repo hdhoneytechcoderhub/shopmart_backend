@@ -1,55 +1,58 @@
 # Flyway Migrations
 
-This project switched from `ddl-auto: update` to Flyway-managed migrations. Because the live
-Railway database already has a schema Hibernate auto-created, Flyway is configured with
-`baseline-on-migrate: true` / `baseline-version: 1`.
+Flyway owns the schema. Hibernate runs with `ddl-auto: validate`, so a mapping/schema
+mismatch fails startup instead of silently altering tables.
 
-**What this means in practice:**
-- There is deliberately **no V1 migration file**. V1 represents "whatever schema already
-  exists" on first deploy after this change — Flyway stamps the DB as being at version 1
-  without executing anything, then runs V2 onward normally.
-- On a **brand new** environment (no existing tables), baseline-on-migrate has no effect
-  until it detects an empty `flyway_schema_history` and a non-empty schema; for a truly empty
-  database, add a V1 migration reflecting the full current schema before deploying there, or
-  let `ddl-auto` create it once and then baseline — do NOT deploy this Flyway config straight
-  to a fresh empty database expecting V2+ alone to create the full schema, because it won't;
-  V2+ only contains the tables/columns added in this pass.
-- All migrations below (V2–V8) are strictly additive (`CREATE TABLE IF NOT EXISTS`,
-  `ADD COLUMN IF NOT EXISTS`) — safe to run against the current production schema.
+## How the two starting points work
 
-**Before deploying:** run these against a staging copy of the real Railway DB first. I
-generated these from the JPA entity definitions, not from introspecting the live database, so
-column types/defaults should be verified against what Postgres actually has (e.g. if a prior
-manual `ALTER TABLE` was applied out of band, like the `user_roles` CHECK constraint fix noted
-elsewhere).
+- **Existing database (including Railway).** The live database already had a schema
+  Hibernate created before Flyway was introduced. `baseline-on-migrate: true` /
+  `baseline-version: 1` stamps such a non-empty database as version 1 without executing
+  anything, then applies later migrations. On these databases `V1__baseline_schema.sql` is
+  below the baseline and is ignored.
+- **Fresh empty database.** There is no existing schema, so Flyway does not baseline and
+  instead runs `V1__baseline_schema.sql`, which creates the full current schema (all 63
+  tables, sequences, constraints and indexes). It then applies V2 onward normally. No
+  bootstrap profile and no `ddl-auto: update` step are needed.
 
-## Bootstrapping a fresh empty database (e.g. local dev)
+`V1` is a frozen snapshot of the current JPA model. Never edit it after release; put every
+later change in a new, higher-versioned migration.
 
-This happened for real during testing, so here is the concrete fix rather than just a warning.
+## Version 6 payment-table repair
 
-Symptom: the `flyway_schema_history` table does not exist yet, Flyway baselines at version 1
-(assuming the base schema already exists), then V7 fails with `relation
-"payment_transactions" does not exist` because on a brand-new empty database, nothing from
-before this migration set actually exists yet.
+V7 changes `payments` and `payment_transactions`, but neither table was ever created by a
+migration in this repository — they only existed where Hibernate had auto-created them. A
+database that was baselined from a partial schema reached version 6 without those tables,
+so V7 failed with:
 
-Deeper issue found while diagnosing this: 14 tables (`payment_transactions`, `wallets`,
-`settings`, `service_bookings`, `service_categories`, `service_items`, `audit_logs`,
-`compliance_documents`, `contact_messages`, `machines`, `order_status_history`,
-`referral_codes`, `referrals`, `wallet_transactions`) have JPA entities but were never
-captured in `schema.sql` or any `phase*.sql` file. They only ever existed via Hibernate's old
-`ddl-auto: update` running against Railway over time, so there is no reliable script anywhere
-that recreates them from scratch.
+```
+SQL State: 42P01
+ERROR: relation "payments" does not exist
+```
 
-Fix: one-time bootstrap, then switch to normal mode.
-1. Run once with the `bootstrap` Spring profile active (`--spring.profiles.active=bootstrap`,
-   or in IntelliJ: Run > Edit Configurations > Active profiles: `bootstrap`) against your
-   fresh empty database. This disables Flyway and lets Hibernate's `ddl-auto: update` create
-   every table directly from the entity definitions, the same mechanism that built the
-   Railway schema originally, just replayed locally instead of hand-written.
-2. Once the app starts successfully, stop it.
-3. Remove the `bootstrap` profile.
-4. Run normally. Flyway will see no `flyway_schema_history` table, baseline at version 1
-   (correct now, since the base schema really does exist), and apply V2 onward cleanly since
-   `payments`, `payment_transactions`, and the rest now exist.
+`V6.5__payment_tables_backfill.sql` runs between V6 and V7 and creates both tables
+idempotently. V7 is already recorded in `flyway_schema_history` on affected databases, so it
+must not be edited — doing so breaks checksum validation. The bridge is additive only; V7
+still adds `refunded_amount` / `idempotency_key`, V19 adds the unique transaction index, and
+V20 adds the payment status constraint.
 
-See `src/main/resources/application-bootstrap.yml` for exactly what the profile changes.
+## Rules
+
+1. Never edit an applied migration (checksum validation will fail). Add a new version.
+2. Migrations must be additive and safe against existing data. Use `IF NOT EXISTS` for
+   tables, indexes and columns.
+3. Do not reset, drop or baseline the production database over an error. Diagnose the
+   missing object and add a forward migration.
+4. Keep Flyway enabled and `ddl-auto` at `validate`.
+5. `out-of-order` is enabled so a repair below the latest applied version (such as V6.5) can
+   still run on databases that already moved past it. Repair migrations must therefore be
+   fully idempotent.
+
+## Verifying
+
+Run both paths against disposable databases before deploying:
+
+- **Fresh:** an empty database must apply V1 through the latest version and start with
+  Hibernate validation passing.
+- **Version 6:** a database with a version-1 baseline and V2–V6 applied (but no payment
+  tables) must apply V6.5, V7 and the rest, then start with validation passing.

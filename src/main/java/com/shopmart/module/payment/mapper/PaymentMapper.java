@@ -8,6 +8,7 @@ public final class PaymentMapper {
 
     public static PaymentResponse toResponse(Payment p) {
         return new PaymentResponse(p.getId(), p.getOrderId(), p.getMethod(), p.getProvider(),
-                p.getAmount(), p.getStatus().name(), p.getGatewayRef(), p.getTransactionId(), p.getCreatedAt());
+                p.getAmount(), p.getStatus().name(), p.getGatewayRef(), p.getTransactionId(),
+                p.getFailureReason(), p.getCreatedAt());
     }
 }

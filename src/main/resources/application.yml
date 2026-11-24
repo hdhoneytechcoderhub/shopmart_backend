@@ -8,9 +8,11 @@ spring:
       - org.springframework.boot.autoconfigure.data.redis.RedisRepositoriesAutoConfiguration
 
   datasource:
-    url: jdbc:postgresql://localhost:5432/shopmart
-    username: postgres
-    password: 1724
+    # Railway/production should provide the standard Spring datasource variables.
+    # Local defaults intentionally contain no password; set SPRING_DATASOURCE_PASSWORD.
+    url: ${SPRING_DATASOURCE_URL:jdbc:postgresql://localhost:5432/shopmart}
+    username: ${SPRING_DATASOURCE_USERNAME:postgres}
+    password: ${SPRING_DATASOURCE_PASSWORD:}
     driver-class-name: org.postgresql.Driver
 
   jpa:
@@ -34,32 +36,23 @@ spring:
     # This codebase has been running on ddl-auto=update, so the live Railway DB already has
     # a schema Flyway didn't create. baseline-on-migrate lets Flyway adopt an existing
     # database: on first run it stamps the DB as already being at baseline-version (1)
-    # without trying to re-run schema creation, then applies V2+ normally from there.
-    # IMPORTANT: this means V1 is intentionally absent from db/migration (see the migration
-    # folder's README) — do not add a V1 migration, or Flyway will try to run it against a
-    # database that already has that schema and fail.
+    # without trying to re-run schema creation, then applies later migrations normally.
+    # V1__baseline_schema.sql exists for genuinely empty databases; Flyway ignores it on a
+    # database that is already baselined at version 1 (see the migration folder's README).
     baseline-on-migrate: ${FLYWAY_BASELINE_ON_MIGRATE:true}
     baseline-version: 1
     validate-on-migrate: true
-    out-of-order: false
+    # V6.5 is a repair migration added below the latest version that some environments
+    # (including local databases) have already reached. Out-of-order lets those databases
+    # apply the idempotent bridge instead of refusing to start. It stays a no-op wherever
+    # the payment tables already exist.
+    out-of-order: ${FLYWAY_OUT_OF_ORDER:true}
 
   data:
     redis:
       host: ${REDIS_HOST:localhost}
       port: ${REDIS_PORT:6379}
       password: ${REDIS_PASSWORD:}
-
-  mail:
-    host: ${MAIL_HOST:smtp-relay.brevo.com}
-    port: ${MAIL_PORT:587}
-    username: cognivistaai@gmail.com
-    password: fwnq vwmx mhxu otmz
-    properties:
-      mail:
-        smtp:
-          auth: true
-          starttls:
-            enable: true
 
   servlet:
     multipart:
@@ -76,9 +69,23 @@ server:
 
 app:
   jwt:
-    secret: 9fK8mQw2XvR7nLp5ZdT4yHs6JcN1BgE8WrY3UaM0KtP9FxDv7QzS4LnH5CbV2JeR
+    # Required. Base64-encoded HMAC key; JwtTokenProvider Base64-decodes it and requires
+    # at least 256 bits. Generate with: openssl rand -base64 48
+    secret: ${JWT_SECRET}
     access-token-expiration-ms: ${JWT_ACCESS_EXP:900000}
     refresh-token-expiration-ms: ${JWT_REFRESH_EXP:604800000}
+
+  # Optional first-run staff accounts. If the password is blank, that account is skipped;
+  # existing users are never modified. Set these in Railway only when you want seeding.
+  admin:
+    email: ${ADMIN_EMAIL:admin@shopmart.local}
+    password: ${ADMIN_PASSWORD:}
+  superadmin:
+    email: ${SUPERADMIN_EMAIL:superadmin@shopmart.local}
+    password: ${SUPERADMIN_PASSWORD:}
+  engineer:
+    email: ${ENGINEER_EMAIL:engineer@shopmart.local}
+    password: ${ENGINEER_PASSWORD:}
 
   cors:
     allowed-origins: ${CORS_ORIGINS:http://localhost:5173,http://localhost:3000}
@@ -90,9 +97,9 @@ app:
     expiration-minutes: 10
     length: 6
 
-  mail:
-    enabled: ${MAIL_ENABLED:false}
-    from: ${MAIL_FROM:no-reply@shopmart.local}
+  resend:
+    api-key: ${RESEND_API_KEY:}
+    from: ${RESEND_FROM_EMAIL:}
 
   sms:
     enabled: ${SMS_ENABLED:false}
@@ -101,12 +108,19 @@ app:
     sender-id: ${SMS_SENDER_ID:SHPMRT}
 
   payments:
-    provider: ${PAYMENT_PROVIDER:stub}
+    # The storefront checkout is Razorpay-only. Credentials must come from the
+    # environment (RAZORPAY_KEY_ID / RAZORPAY_KEY_SECRET / RAZORPAY_WEBHOOK_SECRET).
+    # Never commit live or test secrets here.
+    provider: ${PAYMENT_PROVIDER:razorpay}
 
     razorpay:
       key-id: ${RAZORPAY_KEY_ID:}
       key-secret: ${RAZORPAY_KEY_SECRET:}
       webhook-secret: ${RAZORPAY_WEBHOOK_SECRET:}
+
+    reconciliation:
+      stale-after-minutes: ${PAYMENT_RECONCILE_STALE_MINUTES:30}
+      interval-ms: ${PAYMENT_RECONCILE_INTERVAL_MS:1800000}
 
     stripe:
       secret-key: ${STRIPE_SECRET_KEY:}
@@ -115,6 +129,12 @@ app:
       merchant-id: ${PHONEPE_MERCHANT_ID:}
       salt-key: ${PHONEPE_SALT_KEY:}
       salt-index: ${PHONEPE_SALT_INDEX:1}
+
+  orders:
+    # Address that receives the "new paid order" notification.
+    admin-email: ${ORDER_ADMIN_EMAIL:admin@shopmart.local}
+    # Failed confirmation emails are retried by a scheduled job.
+    email-retry-interval-ms: ${ORDER_EMAIL_RETRY_INTERVAL_MS:300000}
 
   loyalty:
     amount-per-point: ${LOYALTY_AMOUNT_PER_POINT:100}

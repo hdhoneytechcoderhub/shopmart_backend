@@ -9,7 +9,7 @@ cart, wishlist, orders, and payments.
 - **Spring Boot 3.2.5**, Java 17, Maven
 - **Spring Security 6** with stateless JWT (access + rotating refresh tokens)
 - **Spring Data JPA** (Hibernate) on **PostgreSQL**
-- **Spring Data Redis** and **Spring Mail** wired (used in Phase 2)
+- **Spring Data Redis**; transactional email via the Resend HTTPS API
 - **springdoc-openapi** (Swagger UI)
 - Lombok; manual DTO mappers (no MapStruct)
 
@@ -48,15 +48,26 @@ service/impl / controller / mapper`.
 All settings live in `src/main/resources/application.yml` and are overridable via
 environment variables:
 
-| Variable | Default | Purpose |
+Nothing sensitive has a committed default. Set these in the process environment or your
+host's secret store:
+
+| Variable | Required | Purpose |
 |---|---|---|
-| `DB_URL` | `jdbc:postgresql://localhost:5432/shopmart` | JDBC URL |
-| `DB_USERNAME` / `DB_PASSWORD` | `postgres` / `postgres` | DB credentials |
-| `JWT_SECRET` | (dev placeholder) | **Base64-encoded** HS256 secret, ≥ 256 bits |
-| `JWT_ACCESS_EXP` | `900000` | Access token TTL (ms) — 15 min |
-| `JWT_REFRESH_EXP` | `604800000` | Refresh token TTL (ms) — 7 days |
-| `CORS_ORIGINS` | `http://localhost:5173,http://localhost:3000` | Allowed frontend origins |
-| `ADMIN_EMAIL` / `ADMIN_PASSWORD` | `admin@shopmart.local` / `Admin@12345` | Seeded admin |
+| `SPRING_DATASOURCE_URL` | yes | JDBC URL, e.g. `jdbc:postgresql://host:5432/db` |
+| `SPRING_DATASOURCE_USERNAME` | yes | Database user |
+| `SPRING_DATASOURCE_PASSWORD` | yes | Database password |
+| `JWT_SECRET` | yes | **Base64-encoded** HMAC key, at least 32 bytes after decoding |
+| `JWT_ACCESS_EXP` | no | Access token TTL (ms); default 15 min |
+| `JWT_REFRESH_EXP` | no | Refresh token TTL (ms); default 7 days |
+| `CORS_ORIGINS` | production | Comma-separated frontend origins |
+| `RAZORPAY_KEY_ID` | for payments | Razorpay key id (publishable) |
+| `RAZORPAY_KEY_SECRET` | for payments | Razorpay key secret |
+| `RAZORPAY_WEBHOOK_SECRET` | for webhooks | Separate Razorpay webhook signing secret |
+| `CLOUDINARY_CLOUD_NAME` / `CLOUDINARY_API_KEY` / `CLOUDINARY_API_SECRET` | if `STORAGE_PROVIDER=cloudinary` | Cloudinary credentials |
+| `RESEND_API_KEY` / `RESEND_FROM_EMAIL` | for email | Resend API key and verified sender |
+| `ADMIN_PASSWORD` | optional | Seeds the admin account only on first run; blank skips seeding |
+| `SUPERADMIN_PASSWORD` / `ENGINEER_PASSWORD` | optional | Same, for the other staff roles |
+| `ADMIN_EMAIL` / `SUPERADMIN_EMAIL` / `ENGINEER_EMAIL` | optional | Seed email overrides |
 
 Generate a production JWT secret:
 
@@ -66,21 +77,14 @@ openssl rand -base64 48
 
 ## Database schema
 
-`ddl-auto=update` lets Hibernate generate tables for quick local dev. For an explicit,
-version-controlled schema, use the SQL under `db/`:
+Flyway owns the schema and runs automatically on startup (migrations live in
+`src/main/resources/db/migration`). Hibernate runs with `ddl-auto=validate`, so an entity /
+migration mismatch fails startup instead of silently changing tables. A fresh database is
+built by `V1__baseline_schema.sql`; existing databases are baselined and receive later
+migrations only.
 
-```bash
-createdb shopmart
-psql -d shopmart -f db/schema.sql   # tables, constraints, indexes
-psql -d shopmart -f db/seed.sql     # sample categories, brands, products
-```
-
-`db/schema.sql` matches the JPA entities one-to-one (column names, types, FKs, indexes).
-When you manage the schema this way, set `spring.jpa.hibernate.ddl-auto: validate` (or
-`none`) so Hibernate checks against it rather than altering it. `Instant` audit fields map
-to `TIMESTAMPTZ`, money to `NUMERIC(12,2)`, and ids to identity columns — all validate-compatible.
-
-`db/seed.sql` does not create users; the app seeds the admin on first start (proper BCrypt hash).
+The SQL files under `db/` are reference snapshots for manual inspection, not part of the
+deployment path. `db/seed.sql` contains sample catalog data only; it does not create users.
 
 ## Run
 
@@ -88,7 +92,12 @@ to `TIMESTAMPTZ`, money to `NUMERIC(12,2)`, and ids to identity columns — all 
 # create the database
 createdb shopmart
 
-# run
+# required secrets (use your own values; never commit them)
+export SPRING_DATASOURCE_PASSWORD='your-local-db-password'
+export JWT_SECRET="$(openssl rand -base64 48)"
+# optional: seed a staff account on first run
+export ADMIN_PASSWORD='choose-a-strong-password'
+
 mvn spring-boot:run
 ```
 
@@ -99,19 +108,20 @@ The API is served under the `/api` context path on port `8080`.
 - Swagger UI: http://localhost:8080/api/swagger-ui.html
 - OpenAPI JSON: http://localhost:8080/api/v3/api-docs
 
-On first start a default admin (`admin@shopmart.local` / `Admin@12345`) is seeded so the
-ADMIN-only endpoints are immediately testable. **Change these in any shared environment.**
+Staff accounts are no longer created with built-in passwords. Set `ADMIN_PASSWORD`,
+`SUPERADMIN_PASSWORD`, or `ENGINEER_PASSWORD` before the first start if you want those
+accounts seeded; otherwise no staff account is created. Existing accounts are never reset
+or modified by the application.
 
 ## Auth flow
 
-1. `POST /api/auth/register` → creates a customer, emails an OTP (logged to console by default).
+1. `POST /api/auth/register` → creates a customer and sends the OTP through Resend (requires `RESEND_API_KEY` and `RESEND_FROM_EMAIL`).
 2. `POST /api/auth/verify-otp` → marks the email verified.
 3. `POST /api/auth/login` → returns `{ accessToken, refreshToken }`.
 4. Send `Authorization: Bearer <accessToken>` on protected routes.
 5. `POST /api/auth/refresh-token` → rotates the refresh token and issues a new pair.
 
-The OTP and order-confirmation messages are handled by `LoggingNotificationService`,
-which writes to the log. Swap in an SMTP/SMS implementation for Phase 2.
+OTP and order-confirmation emails are sent through Resend. SMS remains a separate, optional channel controlled by `SMS_ENABLED` and its SMS provider configuration. Without Resend credentials, email delivery fails with a safe service-unavailable response; OTPs are not written to logs.
 
 ## Endpoint overview (~45 routes)
 
@@ -189,10 +199,11 @@ adds the `vendor_id` columns to `products` and `order_items`.
   initiate → verify flow is testable without live keys. Provide a Razorpay/Stripe-backed
   implementation and verify the HMAC signature for real before going live.
 - **Coupons / discounts** are stubbed (`discount = 0`) in order creation.
-- **Notifications** (email/SMS) log only; wire Brevo/Twilio in Phase 2.
+- **Notifications** use Resend for email; SMS remains an optional separately configured provider.
 - **RBAC** uses a `Role` enum (`ROLE_CUSTOMER`, `ROLE_ADMIN`, `ROLE_VENDOR`). A full
   roles/permissions table can replace it later without touching controllers.
-- `ddl-auto` is `update` for convenience; switch to Flyway/Liquibase migrations for production.
+- `ddl-auto` is `validate`; Flyway is the only component that changes the schema.
+Configure `RESEND_API_KEY` and `RESEND_FROM_EMAIL` before running email flows. The sender address must be authorized in Resend (verify your domain in Resend for production delivery). No SMTP server configuration or Spring Mail dependency is used.
 
 > Build note: this project was scaffolded without running `mvn compile` (Maven Central
 > was unreachable in the authoring environment). Dependencies resolve on your first build.

@@ -7,7 +7,7 @@ import org.springframework.stereotype.Service;
  * Routes transactional notifications to the configured channels.
  * OTP -> email (if address present) and SMS (if phone present).
  * Order confirmation -> email.
- * The actual channel beans (Email/SmsSender) are swapped via app.mail.enabled / app.sms.enabled.
+ * Email uses Resend; SMS uses the configured app.sms.enabled sender.
  */
 @Service
 @RequiredArgsConstructor

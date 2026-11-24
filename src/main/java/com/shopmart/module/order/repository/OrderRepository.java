@@ -3,9 +3,12 @@ package com.shopmart.module.order.repository;
 import com.shopmart.module.order.entity.Order;
 import com.shopmart.module.order.entity.OrderStatus;
 import com.shopmart.module.order.entity.PaymentStatus;
+import jakarta.persistence.LockModeType;
 import org.springframework.data.domain.Page;
 import org.springframework.data.domain.Pageable;
+import org.springframework.data.jpa.repository.EntityGraph;
 import org.springframework.data.jpa.repository.JpaRepository;
+import org.springframework.data.jpa.repository.Lock;
 import org.springframework.data.jpa.repository.Query;
 import org.springframework.data.repository.query.Param;
 
@@ -19,6 +22,57 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     List<Order> findByUserIdOrderByCreatedAtDesc(Long userId);
     Optional<Order> findByIdAndUserId(Long id, Long userId);
     Optional<Order> findByOrderNumber(String orderNumber);
+
+    /**
+     * Locks the customer's order row for the duration of a payment initiate/verify/webhook
+     * transaction. Two simultaneous clicks (or a webhook racing the browser callback) then
+     * serialise instead of creating duplicate Razorpay orders or duplicate payment rows.
+     */
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select o from Order o where o.id = :id and o.userId = :userId")
+    Optional<Order> findByIdAndUserIdForUpdate(@Param("id") Long id, @Param("userId") Long userId);
+
+    @Lock(LockModeType.PESSIMISTIC_WRITE)
+    @Query("select o from Order o where o.id = :id")
+    Optional<Order> findByIdForUpdate(@Param("id") Long id);
+
+    Optional<Order> findByUserIdAndClientRequestId(Long userId, String clientRequestId);
+
+    @EntityGraph(attributePaths = "items")
+    @Query("select o from Order o where o.id = :id and o.userId = :userId")
+    Optional<Order> findByIdAndUserIdWithItems(@Param("id") Long id, @Param("userId") Long userId);
+
+    @EntityGraph(attributePaths = "items")
+    @Query("select o from Order o where o.id = :id")
+    Optional<Order> findWithItemsById(@Param("id") Long id);
+
+    /**
+     * Admin order search. `status` and `q` are both optional. The customer-name/email
+     * predicates are a subquery so pagination stays correct (no join duplication).
+     */
+    @EntityGraph(attributePaths = "items")
+    @Query("""
+            select o from Order o
+            where (:status is null or o.status = :status)
+              and (:q is null or lower(o.orderNumber) like :q
+                   or o.userId in (select u.id from User u
+                                   where lower(u.name) like :q
+                                      or lower(u.email) like :q
+                                      or u.phone like :q))
+            """)
+    Page<Order> adminSearch(@Param("status") OrderStatus status,
+                            @Param("q") String q,
+                            Pageable pageable);
+
+    @EntityGraph(attributePaths = "items")
+    @Query("""
+            select o from Order o
+            where o.paymentStatus = com.shopmart.module.order.entity.PaymentStatus.PAID
+              and o.paidAt is not null
+              and (o.confirmationEmailSentAt is null or o.adminEmailSentAt is null)
+            order by o.paidAt asc
+            """)
+    List<Order> findPaidOrdersPendingEmails(Pageable pageable);
 
     @Query("select coalesce(sum(o.total), 0) from Order o " +
            "where o.userId = :userId and o.paymentStatus = com.shopmart.module.order.entity.PaymentStatus.PAID")
@@ -62,7 +116,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     List<MonthlyOrderAggregate> monthlyOrderAggregates(@Param("from") Instant from);
 
     interface MonthlyOrderAggregate {
-        java.sql.Timestamp getBucketMonth();
+        java.time.Instant getBucketMonth();
         BigDecimal getRevenue();
         Long getOrderCount();
     }
@@ -94,7 +148,7 @@ public interface OrderRepository extends JpaRepository<Order, Long> {
     List<CohortRetentionRow> cohortRetention(@Param("cohortFrom") Instant cohortFrom, @Param("maxOffset") int maxOffset);
 
     interface CohortRetentionRow {
-        java.sql.Timestamp getCohortMonth();
+        java.time.Instant getCohortMonth();
         Integer getMonthOffset();
         Long getRetainedCount();
     }

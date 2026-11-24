@@ -24,6 +24,10 @@ public interface ProductService {
     ProductResponse createForVendor(Long vendorId, ProductRequest request);
     ProductResponse updateForVendor(Long vendorId, Long productId, ProductRequest request);
 
+    // ---- Admin catalog listing (every status) ----
+    PageResponse<ProductResponse> adminSearch(com.shopmart.module.product.entity.ProductStatus status,
+                                              String q, Pageable pageable);
+
     // ---- Admin approval workflow ----
     PageResponse<ProductSummary> pendingApproval(Pageable pageable);
     ProductResponse approve(Long id);

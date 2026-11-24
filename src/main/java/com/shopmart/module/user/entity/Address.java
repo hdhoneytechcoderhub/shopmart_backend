@@ -24,6 +24,7 @@ public class Address extends BaseEntity {
     private String label;            // Home, Work, etc.
     private String fullName;
     private String phone;
+    private String email;
     private String line1;
     private String line2;
     private String city;

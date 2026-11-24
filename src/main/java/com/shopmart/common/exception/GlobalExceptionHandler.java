@@ -1,6 +1,7 @@
 package com.shopmart.common.exception;
 
 import com.shopmart.common.dto.ApiResponse;
+import com.shopmart.common.notification.NotificationDeliveryException;
 import com.shopmart.config.MetricsConfig;
 import lombok.RequiredArgsConstructor;
 import org.springframework.http.HttpStatus;
@@ -39,6 +40,13 @@ public class GlobalExceptionHandler {
     @ExceptionHandler(TooManyRequestsException.class)
     public ResponseEntity<ApiResponse<Void>> handleTooManyRequests(TooManyRequestsException ex) {
         return ResponseEntity.status(HttpStatus.TOO_MANY_REQUESTS).body(ApiResponse.error(ex.getMessage()));
+    }
+
+    @ExceptionHandler(NotificationDeliveryException.class)
+    public ResponseEntity<ApiResponse<Void>> handleNotificationDeliveryFailure(NotificationDeliveryException ex) {
+        appMetrics.incrementUnhandledError(ex.getClass().getSimpleName());
+        return ResponseEntity.status(HttpStatus.SERVICE_UNAVAILABLE)
+                .body(ApiResponse.error("We could not send the email. Please try again later."));
     }
 
     @ExceptionHandler({BadCredentialsException.class})

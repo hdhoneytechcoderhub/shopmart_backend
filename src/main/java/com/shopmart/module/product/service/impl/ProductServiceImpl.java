@@ -171,6 +171,16 @@ public class ProductServiceImpl implements ProductService {
 
     @Override
     @Transactional(readOnly = true)
+    public PageResponse<ProductResponse> adminSearch(ProductStatus status, String q, Pageable pageable) {
+        Specification<Product> spec = Specification
+                .where(ProductSpecifications.hasStatus(status))
+                .and(ProductSpecifications.adminKeyword(q));
+        Page<ProductResponse> page = productRepository.findAll(spec, pageable).map(ProductMapper::toResponse);
+        return PageResponse.from(page);
+    }
+
+    @Override
+    @Transactional(readOnly = true)
     public PageResponse<ProductSummary> pendingApproval(Pageable pageable) {
         Page<ProductSummary> page = productRepository
                 .findByStatus(ProductStatus.PENDING_APPROVAL, pageable).map(ProductMapper::toSummary);

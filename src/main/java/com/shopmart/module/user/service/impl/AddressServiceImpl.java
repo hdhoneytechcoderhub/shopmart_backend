@@ -55,6 +55,7 @@ public class AddressServiceImpl implements AddressService {
         a.setLabel(req.label());
         a.setFullName(req.fullName());
         a.setPhone(req.phone());
+        a.setEmail(req.email());
         a.setLine1(req.line1());
         a.setLine2(req.line2());
         a.setCity(req.city());
@@ -65,7 +66,7 @@ public class AddressServiceImpl implements AddressService {
     }
 
     private AddressResponse toResponse(Address a) {
-        return new AddressResponse(a.getId(), a.getLabel(), a.getFullName(), a.getPhone(),
+        return new AddressResponse(a.getId(), a.getLabel(), a.getFullName(), a.getPhone(), a.getEmail(),
                 a.getLine1(), a.getLine2(), a.getCity(), a.getState(),
                 a.getPostalCode(), a.getCountry(), a.isDefault());
     }

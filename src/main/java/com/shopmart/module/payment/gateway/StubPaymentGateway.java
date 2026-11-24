@@ -14,7 +14,7 @@ import java.util.UUID;
  */
 @Slf4j
 @Component
-@ConditionalOnProperty(name = "app.payments.provider", havingValue = "stub", matchIfMissing = true)
+@ConditionalOnProperty(name = "app.payments.provider", havingValue = "stub")
 public class StubPaymentGateway implements PaymentGateway {
 
     @Override

@@ -20,6 +20,7 @@ import java.math.BigDecimal;
 import java.math.RoundingMode;
 import java.time.Instant;
 import java.time.LocalDate;
+import java.time.YearMonth;
 import java.time.ZoneOffset;
 import java.time.temporal.ChronoUnit;
 import java.util.ArrayList;
@@ -81,6 +82,61 @@ public class AnalyticsServiceImpl implements AnalyticsService {
             series.add(new SalesPoint(e.getKey(), e.getValue(), countByDay.getOrDefault(e.getKey(), 0L)));
         }
         return series;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<SalesPoint> salesMonthly(int months) {
+        int m = months > 0 ? Math.min(months, 36) : 6;
+        YearMonth first = YearMonth.now(ZoneOffset.UTC).minusMonths(m - 1L);
+        Instant from = first.atDay(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+
+        Map<YearMonth, BigDecimal> revenueByMonth = new TreeMap<>();
+        Map<YearMonth, Long> countByMonth = new TreeMap<>();
+        for (int i = 0; i < m; i++) {
+            YearMonth ym = first.plusMonths(i);
+            revenueByMonth.put(ym, BigDecimal.ZERO);
+            countByMonth.put(ym, 0L);
+        }
+        // Aggregated in Postgres (date_trunc + GROUP BY) — see OrderRepository.monthlyOrderAggregates.
+        for (OrderRepository.MonthlyOrderAggregate row : orderRepository.monthlyOrderAggregates(from)) {
+            YearMonth ym = YearMonth.from(row.getBucketMonth().atZone(ZoneOffset.UTC));
+            if (!revenueByMonth.containsKey(ym)) continue;
+            revenueByMonth.put(ym, row.getRevenue() != null ? row.getRevenue() : BigDecimal.ZERO);
+            countByMonth.put(ym, row.getOrderCount() != null ? row.getOrderCount() : 0L);
+        }
+
+        List<SalesPoint> series = new ArrayList<>();
+        for (Map.Entry<YearMonth, BigDecimal> e : revenueByMonth.entrySet()) {
+            series.add(new SalesPoint(e.getKey().atDay(1), e.getValue(), countByMonth.getOrDefault(e.getKey(), 0L)));
+        }
+        return series;
+    }
+
+    @Override
+    @Transactional(readOnly = true)
+    public List<CustomerGrowthPoint> customerGrowth(int months) {
+        int m = months > 0 ? Math.min(months, 36) : 6;
+        YearMonth first = YearMonth.now(ZoneOffset.UTC).minusMonths(m - 1L);
+        Instant from = first.atDay(1).atStartOfDay(ZoneOffset.UTC).toInstant();
+
+        Map<YearMonth, Long> byMonth = new TreeMap<>();
+        for (int i = 0; i < m; i++) {
+            byMonth.put(first.plusMonths(i), 0L);
+        }
+        // Same "new customers per month" definition as the growth-trend report, computed in
+        // Postgres — see UserRepository.monthlyNewCustomers().
+        for (var row : userRepository.monthlyNewCustomers(from)) {
+            YearMonth ym = YearMonth.from(row.getBucketMonth().atZone(ZoneOffset.UTC));
+            if (!byMonth.containsKey(ym)) continue;
+            byMonth.put(ym, row.getNewCustomers() != null ? row.getNewCustomers() : 0L);
+        }
+
+        List<CustomerGrowthPoint> points = new ArrayList<>();
+        for (Map.Entry<YearMonth, Long> e : byMonth.entrySet()) {
+            points.add(new CustomerGrowthPoint(e.getKey().toString(), e.getValue()));
+        }
+        return points;
     }
 
     @Override

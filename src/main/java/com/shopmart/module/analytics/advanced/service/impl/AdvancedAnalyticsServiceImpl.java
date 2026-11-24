@@ -79,7 +79,7 @@ public class AdvancedAnalyticsServiceImpl implements AdvancedAnalyticsService {
         // SQL-side aggregation (see OrderRepository.monthlyOrderAggregates) instead of pulling
         // every order row into the JVM — see the class javadoc for when this still isn't enough.
         for (OrderRepository.MonthlyOrderAggregate row : orderRepository.monthlyOrderAggregates(from)) {
-            YearMonth ym = YearMonth.from(row.getBucketMonth().toInstant().atZone(ZoneOffset.UTC));
+            YearMonth ym = YearMonth.from(row.getBucketMonth().atZone(ZoneOffset.UTC));
             byMonth.merge(ym, row.getRevenue(), (existing, ignored) -> row.getRevenue());
         }
         List<MonthValue> result = new ArrayList<>();
@@ -103,14 +103,14 @@ public class AdvancedAnalyticsServiceImpl implements AdvancedAnalyticsService {
         // growthTrend(), computed in Postgres — see UserRepository.monthlyNewCustomers().
         Map<YearMonth, Long> cohortSizes = new TreeMap<>();
         for (var row : userRepository.monthlyNewCustomers(cohortFrom)) {
-            cohortSizes.put(YearMonth.from(row.getBucketMonth().toInstant().atZone(ZoneOffset.UTC)), row.getNewCustomers());
+            cohortSizes.put(YearMonth.from(row.getBucketMonth().atZone(ZoneOffset.UTC)), row.getNewCustomers());
         }
 
         // Retention counts: one Postgres query for every (cohort, offset) pair at once —
         // see OrderRepository.cohortRetention() — instead of an N-cohort loop of in-memory filters.
         Map<YearMonth, long[]> retainedByCohort = new TreeMap<>();
         for (OrderRepository.CohortRetentionRow row : orderRepository.cohortRetention(cohortFrom, track - 1)) {
-            YearMonth cohort = YearMonth.from(row.getCohortMonth().toInstant().atZone(ZoneOffset.UTC));
+            YearMonth cohort = YearMonth.from(row.getCohortMonth().atZone(ZoneOffset.UTC));
             int offset = row.getMonthOffset();
             if (offset < 0 || offset >= track) continue; // defensive; SQL HAVING already filters this
             retainedByCohort.computeIfAbsent(cohort, k -> new long[track])[offset] = row.getRetainedCount();
@@ -163,14 +163,14 @@ public class AdvancedAnalyticsServiceImpl implements AdvancedAnalyticsService {
         // OrderRepository.monthlyOrderAggregates / UserRepository.monthlyNewCustomers —
         // instead of loading every order and every customer into the JVM.
         for (OrderRepository.MonthlyOrderAggregate row : orderRepository.monthlyOrderAggregates(from)) {
-            YearMonth ym = YearMonth.from(row.getBucketMonth().toInstant().atZone(ZoneOffset.UTC));
+            YearMonth ym = YearMonth.from(row.getBucketMonth().atZone(ZoneOffset.UTC));
             if (revenueByMonth.containsKey(ym)) {
                 revenueByMonth.put(ym, row.getRevenue());
                 ordersByMonth.put(ym, row.getOrderCount());
             }
         }
         for (var row : userRepository.monthlyNewCustomers(from)) {
-            YearMonth ym = YearMonth.from(row.getBucketMonth().toInstant().atZone(ZoneOffset.UTC));
+            YearMonth ym = YearMonth.from(row.getBucketMonth().atZone(ZoneOffset.UTC));
             if (newCustomersByMonth.containsKey(ym)) newCustomersByMonth.put(ym, row.getNewCustomers());
         }
 

@@ -5,3 +5,9 @@ target/
 !.env.example
 *.log
 .DS_Store
+uploads/
+secrets/
+*.pem
+*.p12
+*.jks
+firebase-service-account*.json

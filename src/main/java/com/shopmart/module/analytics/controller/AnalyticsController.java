@@ -29,6 +29,16 @@ public class AnalyticsController {
         return ApiResponse.ok(service.salesOverTime(days));
     }
 
+    @GetMapping("/sales-monthly")
+    public ApiResponse<List<SalesPoint>> salesMonthly(@RequestParam(defaultValue = "6") int months) {
+        return ApiResponse.ok(service.salesMonthly(months));
+    }
+
+    @GetMapping("/customer-growth")
+    public ApiResponse<List<CustomerGrowthPoint>> customerGrowth(@RequestParam(defaultValue = "6") int months) {
+        return ApiResponse.ok(service.customerGrowth(months));
+    }
+
     @GetMapping("/top-products")
     public ApiResponse<List<TopProduct>> topProducts(@RequestParam(defaultValue = "10") int limit) {
         return ApiResponse.ok(service.topProducts(limit));

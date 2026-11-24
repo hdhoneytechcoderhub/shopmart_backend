@@ -1,11 +1,13 @@
 package com.shopmart.module.user.dto;
 
+import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 
 public record AddressRequest(
         String label,
         @NotBlank(message = "Full name is required") String fullName,
         @NotBlank(message = "Phone is required") String phone,
+        @Email(message = "Enter a valid email address") String email,
         @NotBlank(message = "Address line 1 is required") String line1,
         String line2,
         @NotBlank(message = "City is required") String city,
