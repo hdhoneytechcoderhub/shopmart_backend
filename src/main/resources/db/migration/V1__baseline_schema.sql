@@ -545,12 +545,12 @@ ALTER SEQUENCE public.custom_roles_id_seq OWNED BY public.custom_roles.id;
 --
 
 CREATE TABLE public.customer_notes (
-    author_id bigint NOT NULL,
-    created_at timestamp(6) with time zone,
-    customer_id bigint NOT NULL,
-    id bigint NOT NULL,
-    updated_at timestamp(6) with time zone,
-    note character varying(2000) NOT NULL
+                                       author_id bigint NOT NULL,
+                                       created_at timestamp(6) with time zone,
+                                       customer_id bigint NOT NULL,
+                                       id bigint NOT NULL,
+                                       updated_at timestamp(6) with time zone,
+                                       note character varying(2000) NOT NULL
 );
 
 
